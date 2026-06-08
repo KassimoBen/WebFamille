@@ -140,7 +140,7 @@ function initDb() {
         telephone, ville_habitation, pays_habitation, origine_mayotte_commune,
         email, password_hash, id_parent)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-    `).run('Manrouf Mouendadje', 'Fondateur', 'Inconnu', 'Inconnue',
+    `).run('MOENDADZE Manroufou', 'Fondateur', 'Inconnu', 'Inconnue',
       '0000000000', '\u2014', 'Mayotte', null, email, hash);
   }
 }
@@ -390,7 +390,7 @@ function layout(title, user, body, flashSuccess, flashError, cp) {
     <a href="/" class="brand-icon">M</a>
     <div class="brand-text">
       <div class="brand-title">Manrouf et les enfants de Mayotte</div>
-      <div class="brand-sub">Bariza dans la famille Mouendadje</div>
+      <div class="brand-sub">Bariza dans la famille MOENDADZE</div>
     </div>
   </div>
   <input type="checkbox" id="menuToggle" class="menu-toggle" autocomplete="off" />
@@ -484,9 +484,9 @@ app.get('/', (req, res) => {
   const body = `
     <section class="hero fade-in">
       <div class="hero-text slide-up">
-        <h1>Bienvenue dans l’heritage de <span class="accent">Manrouf Mouendadje</span></h1>
+        <h1>Bienvenue dans l’heritage de <span class="accent">MOENDADZE Manroufou</span></h1>
         <p>Notre famille vient de <strong>Mayotte</strong> — chacun peut se presenter, partager des photos, et retrouver les autres membres.</p>
-        <blockquote>"Notre famille vient de Mayotte, par Manrouf Mouendadje"</blockquote>
+        <blockquote>"Notre famille vient de Mayotte, par MOENDADZE Manroufou"</blockquote>
         <div class="hero-cta">
           ${user ? `<a class="btn btn-pulse" href="/profile">Mon profil</a>` : `<a class="btn btn-pulse" href="/register">Rejoindre la famille</a>`}
           <a class="btn btn-ghost" href="/gallery">Voir la galerie</a>
@@ -505,7 +505,7 @@ app.get('/', (req, res) => {
       </div>
       <div class="panel slide-up" style="animation-delay:.2s">
         <h2 class="section-heading">Nos racines</h2>
-        <p>${svgIcon('location')} Une page dediee a l’histoire de Manrouf Mouendadje, avec une biographie courte et la fierte mahoraise.</p>
+        <p>${svgIcon('location')} Une page dediee a l’histoire de MOENDADZE Manroufou, avec une biographie courte et la fierte mahoraise.</p>
         <a href="/about">${svgIcon('home')} Decouvrir</a>
       </div>
     </section>
@@ -519,11 +519,11 @@ app.get('/about', (req, res) => {
   const body = `
     <section class="panel">
       <h2 class="section-heading" style="font-size:1.4rem">Nos racines — Mayotte</h2>
-      <h2>Manrouf Mouendadje</h2>
-      <p>Manrouf Mouendadje, originaire de <strong>Mayotte</strong>, est le grand-pere fondateur. Toute la famille descend de lui ou se rattache a son heritage.</p>
+      <h2>MOENDADZE Manroufou</h2>
+      <p>MOENDADZE Manroufou, originaire de <strong>Mayotte</strong>, est le grand-pere fondateur. Toute la famille descend de lui ou se rattache a son heritage.</p>
       <div class="about-photo"></div>
       <p>${svgIcon('users')} Aujourd’hui, <strong>${count} membres</strong> sont inscrits dans l’arbre familial.</p>
-      <div class="cite">"Notre famille vient de Mayotte, par Manrouf Mouendadje"</div>
+      <div class="cite">"Notre famille vient de Mayotte, par MOENDADZE Manroufou"</div>
       <p>${svgIcon('location')} Couleurs du site : <span class="accent">bleu</span> (ocean Indien &amp; iles de Mayotte).</p>
     </section>`;
   res.send(layout('Nos racines', user, body, null, null, req.path));

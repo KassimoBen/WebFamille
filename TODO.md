@@ -4,7 +4,7 @@
 
 - [x] Projet Node.js + Express 5 + SQLite (better-sqlite3)
 - [x] Tables : membres (+ lien_avec_manrouf, origine_mayotte_commune, id_parent) et photos (+ lieu_photo)
-- [x] Seed optionnel (Manrouf Mouendadje comme référence)
+- [x] Seed optionnel (MOENDADZE Manroufou comme référence)
 - [x] Auth : inscription + connexion + session (cookie) + flash messages
 - [x] Endpoints membres (profil/annuaire/fiche)
 - [x] Endpoints photos (upload avec validation type/taille + galerie)
