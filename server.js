@@ -1361,27 +1361,27 @@ function insertPhoto(fields) {
 }
 
 app.post('/add-photo', requireAuth, (req, res, next) => {
-  const videoUrl = req.body.video_url?.trim() || '';
-  if (videoUrl) {
-    const parsed = parseVideoUrl(videoUrl);
-    if (!parsed) { req.flash('error', 'Lien video invalide (YouTube ou Vimeo attendu).'); return res.redirect('/add-photo') }
-    insertPhoto({
-      membre_id: req.session.userId,
-      image_path: 'video_' + parsed.id + '.jpg',
-      lieu_photo: req.body.lieu_photo?.trim() || null,
-      album_id: parseInt(req.body.album_id) || null,
-      video_url: videoUrl,
-      media_type: 'video_link',
-    });
-    req.flash('success', 'Video publiee !');
-    return res.redirect('/gallery');
-  }
   uploadResized.single('photo')(req, res, async (err) => {
     if (err) {
       if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
         req.flash('error', 'Fichier trop volumineux (max 50 Mo).');
       } else { req.flash('error', err.message || 'Erreur lors de l\'upload.') }
       return res.redirect('/add-photo');
+    }
+    const videoUrl = (req.body?.video_url || '').trim();
+    if (videoUrl) {
+      const parsed = parseVideoUrl(videoUrl);
+      if (!parsed) { req.flash('error', 'Lien video invalide (YouTube ou Vimeo attendu).'); return res.redirect('/add-photo') }
+      insertPhoto({
+        membre_id: req.session.userId,
+        image_path: 'video_' + parsed.id + '.jpg',
+        lieu_photo: (req.body?.lieu_photo || '').trim() || null,
+        album_id: parseInt(req.body?.album_id) || null,
+        video_url: videoUrl,
+        media_type: 'video_link',
+      });
+      req.flash('success', 'Video publiee !');
+      return res.redirect('/gallery');
     }
     if (!req.file) { req.flash('error', 'Selectionnez un fichier ou un lien video.'); return res.redirect('/add-photo') }
     const isVideo = ALLOWED_VIDEO_TYPES.includes(req.file.mimetype);
@@ -1396,8 +1396,8 @@ app.post('/add-photo', requireAuth, (req, res, next) => {
     insertPhoto({
       membre_id: req.session.userId,
       image_path: req.file.filename,
-      lieu_photo: req.body.lieu_photo?.trim() || null,
-      album_id: parseInt(req.body.album_id) || null,
+      lieu_photo: (req.body?.lieu_photo || '').trim() || null,
+      album_id: parseInt(req.body?.album_id) || null,
       media_type: isVideo ? 'video' : 'photo',
     });
     req.flash('success', isVideo ? 'Video publiee !' : 'Photo publiee !');
