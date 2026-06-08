@@ -18,7 +18,7 @@ const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data.sqlite3');
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 const db = sqlite3(DB_PATH);
 db.pragma('journal_mode = WAL');
@@ -60,7 +60,9 @@ app.use((req, res, next) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo'];
+const ALLOWED_MEDIA_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES];
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
@@ -74,10 +76,10 @@ const upload = multer({
   storage,
   limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (req, file, cb) => {
-    if (ALLOWED_TYPES.includes(file.mimetype)) {
+    if (ALLOWED_MEDIA_TYPES.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Format non autorise (JPG, PNG, GIF, WebP uniquement).'));
+      cb(new Error('Format non autorise (images JPG/PNG/GIF/WebP ou videos MP4/WebM/OGG).'));
     }
   },
 });
@@ -94,7 +96,7 @@ const uploadAvatar = multer({
   storage: avatarStorage,
   limits: { fileSize: 2 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (ALLOWED_TYPES.includes(file.mimetype)) {
+    if (ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new Error('Format non autorise (JPG, PNG, GIF, WebP uniquement).'));
@@ -153,6 +155,8 @@ function migrateDb() {
   try { db.exec('ALTER TABLE membres ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0'); } catch (e) {}
   try { db.exec('ALTER TABLE membres ADD COLUMN date_naissance TEXT'); } catch (e) {}
   try { db.exec('ALTER TABLE photos ADD COLUMN album_id INTEGER'); } catch (e) {}
+  try { db.exec("ALTER TABLE photos ADD COLUMN video_url TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE photos ADD COLUMN media_type TEXT NOT NULL DEFAULT 'photo'"); } catch (e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS albums (
@@ -246,7 +250,7 @@ function validateRegistration(data) {
   if (!data.nom_complet || data.nom_complet.trim().length < 2)
     errors.push('Le nom complet est requis (min 2 caracteres).');
   if (!data.lien_avec_manrouf || data.lien_avec_manrouf.trim().length < 2)
-    errors.push('Le lien avec Manrouf est requis.');
+    errors.push('Le lien avec Manroufou est requis.');
   if (!data.nom_pere || data.nom_pere.trim().length < 1)
     errors.push('Le nom du pere est requis.');
   if (!data.nom_mere || data.nom_mere.trim().length < 1)
@@ -310,6 +314,7 @@ function svgIcon(name) {
     search: S + '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' + E,
     shield: S + '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>' + E,
     cake: S + '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M12 3V1"/><path d="M9 18v-4"/><path d="M15 18v-4"/>' + E,
+    play: S + '<polygon points="5 3 19 12 5 21 5 3"/>' + E,
   };
   return '<span class="ico">' + (icons[name] || icons.location) + '</span>';
 }
@@ -366,7 +371,7 @@ function layout(title, user, body, flashSuccess, flashError, cp) {
     ['/albums', 'Albums'],
     ['/stats', 'Statistiques'],
     ['/profile', 'Mon profil'],
-    ['/add-photo', 'Ajouter photo'],
+    ['/add-photo', 'Ajouter media'],
     ['/about', 'Nos racines'],
     (user && user.is_admin === 1) ? ['/admin', 'Admin'] : null,
   ].filter(Boolean);
@@ -389,7 +394,7 @@ function layout(title, user, body, flashSuccess, flashError, cp) {
   <div class="brand">
     <a href="/" class="brand-icon">M</a>
     <div class="brand-text">
-      <div class="brand-title">Manrouf et les enfants de Mayotte</div>
+      <div class="brand-title">Manroufou et les enfants de Mayotte</div>
       <div class="brand-sub">Bariza dans la famille MOENDADZE</div>
     </div>
   </div>
@@ -430,21 +435,66 @@ function memberKicker(m) {
     </div>`;
 }
 
+function parseVideoUrl(url) {
+  if (!url) return null;
+  let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+  if (m) return { platform: 'youtube', id: m[1], embedUrl: `https://www.youtube.com/embed/${m[1]}`, thumb: `https://img.youtube.com/vi/${m[1]}/hqdefault.jpg` };
+  m = url.match(/vimeo\.com\/(\d+)/);
+  if (m) return { platform: 'vimeo', id: m[1], embedUrl: `https://player.vimeo.com/video/${m[1]}`, thumb: null };
+  return null;
+}
+
 function renderPhotoGrid(photos, showAlbum) {
-  if (!photos || photos.length === 0) return '<p class="muted">Aucune photo pour le moment.</p>';
-  return photos.map(p => `
-    <div class="photo" data-photo-id="${p.id}" onclick="openLightbox(${p.id})">
-      <a href="/uploads/${e(p.image_path)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
-        <img src="/uploads/${e(p.image_path)}" alt="Photo" loading="lazy"/>
-      </a>
-      <div class="photo-meta">
-        ${p.nom_complet ? `<div>${svgIcon('user')} ${e(p.nom_complet)}</div>` : ''}
-        <div>${svgIcon('location')} ${p.lieu_photo ? e(p.lieu_photo) : '\u2014'}</div>
-        <div>${svgIcon('comment')} ${p.comment_count || 0} commentaire${(p.comment_count || 0) > 1 ? 's' : ''}</div>
-        <div>${e(p.created_at)}</div>
-        ${showAlbum && p.album_nom ? `<div>${svgIcon('album')} ${e(p.album_nom)}</div>` : ''}
-      </div>
-    </div>`).join('');
+  if (!photos || photos.length === 0) return '<p class="muted">Aucun media pour le moment.</p>';
+  return photos.map(p => {
+    if (p.media_type === 'video') {
+      return `
+        <div class="photo" data-photo-id="${p.id}" data-local-video="/uploads/${e(p.image_path)}" onclick="openLightbox(${p.id})">
+          <div class="video-thumb">
+            <video src="/uploads/${e(p.image_path)}" preload="metadata" muted playsinline style="width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--surface);display:block"></video>
+            <div class="play-overlay">${svgIcon('play')}</div>
+          </div>
+          <div class="photo-meta">
+            ${p.nom_complet ? `<div>${svgIcon('user')} ${e(p.nom_complet)}</div>` : ''}
+            <div>${svgIcon('location')} ${p.lieu_photo ? e(p.lieu_photo) : '\u2014'}</div>
+            <div>${svgIcon('comment')} ${p.comment_count || 0} commentaire${(p.comment_count || 0) > 1 ? 's' : ''}</div>
+            <div>${e(p.created_at)}</div>
+            ${showAlbum && p.album_nom ? `<div>${svgIcon('album')} ${e(p.album_nom)}</div>` : ''}
+          </div>
+        </div>`;
+    }
+    const vid = parseVideoUrl(p.video_url);
+    if (vid) {
+      const thumb = vid.thumb || '/uploads/' + e(p.image_path);
+      return `
+        <div class="photo" data-photo-id="${p.id}" data-video="${vid.embedUrl}" onclick="openLightbox(${p.id})">
+          <div class="video-thumb">
+            <img src="${thumb}" alt="Video" loading="lazy"/>
+            <div class="play-overlay">${svgIcon('play')}</div>
+          </div>
+          <div class="photo-meta">
+            ${p.nom_complet ? `<div>${svgIcon('user')} ${e(p.nom_complet)}</div>` : ''}
+            <div>${svgIcon('location')} ${p.lieu_photo ? e(p.lieu_photo) : '\u2014'}</div>
+            <div>${svgIcon('comment')} ${p.comment_count || 0} commentaire${(p.comment_count || 0) > 1 ? 's' : ''}</div>
+            <div>${e(p.created_at)}</div>
+            ${showAlbum && p.album_nom ? `<div>${svgIcon('album')} ${e(p.album_nom)}</div>` : ''}
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="photo" data-photo-id="${p.id}" onclick="openLightbox(${p.id})">
+        <a href="/uploads/${e(p.image_path)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+          <img src="/uploads/${e(p.image_path)}" alt="Photo" loading="lazy"/>
+        </a>
+        <div class="photo-meta">
+          ${p.nom_complet ? `<div>${svgIcon('user')} ${e(p.nom_complet)}</div>` : ''}
+          <div>${svgIcon('location')} ${p.lieu_photo ? e(p.lieu_photo) : '\u2014'}</div>
+          <div>${svgIcon('comment')} ${p.comment_count || 0} commentaire${(p.comment_count || 0) > 1 ? 's' : ''}</div>
+          <div>${e(p.created_at)}</div>
+          ${showAlbum && p.album_nom ? `<div>${svgIcon('album')} ${e(p.album_nom)}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function asyncHandler(fn) {
@@ -538,7 +588,7 @@ app.get('/register', (req, res) => {
       <form method="POST" action="/register">
         <div class="form-grid">
           <label>${svgIcon('user')} Nom complet *<input name="nom_complet" required minlength="2"/></label>
-          <label>${svgIcon('users')} Lien avec Manrouf *<input name="lien_avec_manrouf" required placeholder="ex: petit-fils, arriere-petit-fils..."/></label>
+          <label>${svgIcon('users')} Lien avec Manroufou *<input name="lien_avec_manrouf" required placeholder="ex: petit-fils, arriere-petit-fils..."/></label>
           <label>${svgIcon('user')} Nom du pere *<input name="nom_pere" required/></label>
           <label>${svgIcon('user')} Nom de la mere *<input name="nom_mere" required/></label>
           <label>${svgIcon('phone')} Telephone * ${phoneGroupHtml()}</label>
@@ -781,7 +831,7 @@ app.get('/profile', requireAuth, (req, res) => {
 
       <div class="profile-main">
         <div class="panel">
-          <h3 class="section-heading" style="font-size:.95rem;margin-bottom:12px">${svgIcon('image')} Mes photos (${photos.length})</h3>
+          <h3 class="section-heading" style="font-size:.95rem;margin-bottom:12px">${svgIcon('image')} Mes medias (${photos.length})</h3>
           <div class="gallery">${renderPhotoGrid(photos)}</div>
         </div>
       </div>
@@ -802,7 +852,7 @@ app.get('/profile/edit', requireAuth, (req, res) => {
           </label>
           <label>Fonction / Metier <input name="fonction" value="${e(user.fonction || '')}" placeholder="ex: Enseignant, Pecheur..."/></label>
           <label>Nom complet <input name="nom_complet" value="${e(user.nom_complet)}" required/></label>
-          <label>Lien avec Manrouf <input name="lien_avec_manrouf" value="${e(user.lien_avec_manrouf || '')}" required/></label>
+          <label>Lien avec Manroufou <input name="lien_avec_manrouf" value="${e(user.lien_avec_manrouf || '')}" required/></label>
           <label>Nom du pere <input name="nom_pere" value="${e(user.nom_pere)}" required/></label>
           <label>Nom de la mere <input name="nom_mere" value="${e(user.nom_mere)}" required/></label>
           <label>Telephone * ${phoneGroupHtml(user.telephone)}</label>
@@ -1020,7 +1070,7 @@ app.get('/members/:id', (req, res) => {
 
       <div class="profile-main">
         <div class="panel">
-          <h3 class="section-heading" style="font-size:.95rem;margin-bottom:12px">${svgIcon('image')} Galerie photos (${photos.length})</h3>
+          <h3 class="section-heading" style="font-size:.95rem;margin-bottom:12px">${svgIcon('image')} Galerie medias (${photos.length})</h3>
           <div class="gallery">${renderPhotoGrid(photos)}</div>
         </div>
       </div>
@@ -1061,6 +1111,7 @@ app.get('/gallery', (req, res) => {
   const body = `
     <section class="panel">
       <h1 class="section-heading">${svgIcon('image')} Galerie familiale</h1>
+      <p class="muted" style="margin-top:-8px;margin-bottom:16px">Photos et videos partagees par la famille.</p>
       <div class="album-filter" style="margin-bottom:16px">
         <form method="GET" action="/gallery" class="search-form">
           ${svgIcon('album')} <select name="album" onchange="this.form.submit()" class="album-select">
@@ -1070,14 +1121,16 @@ app.get('/gallery', (req, res) => {
           ${albumId ? `<a class="btn btn-small btn-ghost" href="/gallery">Effacer</a>` : ''}
         </form>
       </div>
-      ${total === 0 ? '<p class="muted">Aucune photo. <a href="/add-photo">Ajoutez la premiere !</a></p>' : ''}
+      ${total === 0 ? '<p class="muted">Aucun media. <a href="/add-photo">Ajoutez le premier !</a></p>' : ''}
       <div class="gallery" id="galleryGrid">${renderPhotoGrid(photos)}</div>
       ${total > perPage ? `<div class="pagination">${pagination.join('')}</div>` : ''}
     </section>
     <div id="lightbox" class="lightbox" onclick="closeLightbox()">
       <span class="lightbox-close">&times;</span>
       <div class="lightbox-content" onclick="event.stopPropagation()">
-        <img id="lightboxImg" src="" alt="Photo"/>
+        <img id="lightboxImg" src="" alt="Photo" style="display:none"/>
+        <iframe id="lightboxVideo" src="" frameborder="0" allowfullscreen style="display:none;width:100%;aspect-ratio:16/9;border-radius:8px"></iframe>
+        <video id="lightboxLocalVideo" src="" controls playsinline style="display:none;width:100%;aspect-ratio:16/9;border-radius:8px;background:#000"></video>
         <div id="lightboxMeta" class="lightbox-meta"></div>
         <div id="lightboxComments" class="lightbox-comments"></div>
         <form id="lightboxCommentForm" class="lightbox-form" onsubmit="return submitComment(event)">
@@ -1230,15 +1283,22 @@ app.get('/admin', requireAuth, requireAdmin, (req, res) => {
         </table>
       </div>
       <h3 style="margin-top:24px">${svgIcon('image')} Dernieres photos</h3>
-      <div class="gallery">${photos.map(p => `
+      <div class="gallery">${photos.map(p => {
+        const isLocalVideo = p.media_type === 'video';
+        const vid = parseVideoUrl(p.video_url);
+        const src = vid ? (vid.thumb || '/uploads/' + e(p.image_path)) : '/uploads/' + e(p.image_path);
+        return `
         <div class="photo">
-          <img src="/uploads/${e(p.image_path)}" alt="Photo" loading="lazy" style="aspect-ratio:4/3;object-fit:cover"/>
+          ${isLocalVideo ? `<div class="video-thumb"><video src="/uploads/${e(p.image_path)}" preload="metadata" muted playsinline style="width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--surface);display:block"></video><div class="play-overlay" style="font-size:20px">${svgIcon('play')}</div></div>`
+          : vid ? `<div class="video-thumb"><img src="${src}" alt="Video" loading="lazy" style="aspect-ratio:4/3;object-fit:cover"/><div class="play-overlay" style="font-size:20px">${svgIcon('play')}</div></div>`
+            : `<img src="/uploads/${e(p.image_path)}" alt="Photo" loading="lazy" style="aspect-ratio:4/3;object-fit:cover"/>`}
           <div class="photo-meta">
             <div>${e(p.nom_complet)}</div>
             <div>${e(p.created_at)}</div>
             <a class="btn btn-small btn-ghost" href="/admin/delete-photo/${p.id}" onclick="return confirm('Supprimer cette photo ?')">${svgIcon('lock')} Supprimer</a>
           </div>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
       </div>
     </section>`;
   res.send(layout('Administration', user, body, null, null, req.path));
@@ -1260,10 +1320,10 @@ app.get('/admin/remove-admin/:id', requireAuth, requireAdmin, (req, res) => {
 app.get('/admin/delete-photo/:id', requireAuth, requireAdmin, (req, res) => {
   const p = db.prepare('SELECT * FROM photos WHERE id = ?').get(req.params.id);
   if (p) {
-    try { fs.unlinkSync(path.join(uploadsDir, p.image_path)); } catch (e) {}
+    if (!p.video_url) { try { fs.unlinkSync(path.join(uploadsDir, p.image_path)); } catch (e) {} }
     db.prepare('DELETE FROM photos WHERE id = ?').run(req.params.id);
   }
-  req.flash('success', 'Photo supprimee.');
+  req.flash('success', 'Media supprime.');
   res.redirect('/admin');
 });
 
@@ -1280,12 +1340,23 @@ const uploadResized = multer({
   storage: sharpStorage,
   limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (req, file, cb) => {
-    if (ALLOWED_TYPES.includes(file.mimetype)) { cb(null, true) }
-    else { cb(new Error('Format non autorise (JPG, PNG, GIF, WebP uniquement).')) }
+    if (ALLOWED_MEDIA_TYPES.includes(file.mimetype)) { cb(null, true) }
+    else { cb(new Error('Format non autorise (images JPG/PNG/GIF/WebP ou videos MP4/WebM/OGG).')) }
   },
 });
 
 app.post('/add-photo', requireAuth, (req, res, next) => {
+  const videoUrl = req.body.video_url?.trim() || '';
+  if (videoUrl) {
+    const parsed = parseVideoUrl(videoUrl);
+    if (!parsed) { req.flash('error', 'Lien video invalide (YouTube ou Vimeo attendu).'); return res.redirect('/add-photo') }
+    const lieu_photo = req.body.lieu_photo?.trim() || null;
+    const album_id = parseInt(req.body.album_id) || null;
+    db.prepare('INSERT INTO photos (membre_id, image_path, lieu_photo, album_id, video_url, media_type) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(req.session.userId, 'video_' + parsed.id + '.jpg', lieu_photo, album_id, videoUrl, 'video_link');
+    req.flash('success', 'Video publiee !');
+    return res.redirect('/gallery');
+  }
   uploadResized.single('photo')(req, res, async (err) => {
     if (err) {
       if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
@@ -1293,19 +1364,22 @@ app.post('/add-photo', requireAuth, (req, res, next) => {
       } else { req.flash('error', err.message || 'Erreur lors de l\'upload.') }
       return res.redirect('/add-photo');
     }
-    if (!req.file) { req.flash('error', 'Aucun fichier selectionne.'); return res.redirect('/add-photo') }
-    try {
-      const outPath = path.join(uploadsDir, req.file.filename);
-      const buf = await sharp(req.file.path).resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
-      fs.writeFileSync(outPath, buf);
-      if (req.file.path !== outPath) try { fs.unlinkSync(req.file.path) } catch (e) {}
-      req.file.filename = req.file.filename;
-    } catch (e) { console.error('Sharp error:', e) }
+    if (!req.file) { req.flash('error', 'Selectionnez un fichier ou un lien video.'); return res.redirect('/add-photo') }
+    const isVideo = ALLOWED_VIDEO_TYPES.includes(req.file.mimetype);
+    if (!isVideo) {
+      try {
+        const outPath = path.join(uploadsDir, req.file.filename);
+        const buf = await sharp(req.file.path).resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
+        fs.writeFileSync(outPath, buf);
+        if (req.file.path !== outPath) try { fs.unlinkSync(req.file.path) } catch (e) {}
+      } catch (e) { console.error('Sharp error:', e) }
+    }
     const lieu_photo = req.body.lieu_photo?.trim() || null;
     const album_id = parseInt(req.body.album_id) || null;
-    db.prepare('INSERT INTO photos (membre_id, image_path, lieu_photo, album_id) VALUES (?, ?, ?, ?)')
-      .run(req.session.userId, req.file.filename, lieu_photo, album_id);
-    req.flash('success', 'Photo publiee !');
+    const mediaType = isVideo ? 'video' : 'photo';
+    db.prepare('INSERT INTO photos (membre_id, image_path, lieu_photo, album_id, media_type) VALUES (?, ?, ?, ?, ?)')
+      .run(req.session.userId, req.file.filename, lieu_photo, album_id, mediaType);
+    req.flash('success', isVideo ? 'Video publiee !' : 'Photo publiee !');
     res.redirect('/gallery');
   });
 });
@@ -1315,22 +1389,23 @@ app.get('/add-photo', requireAuth, (req, res) => {
   const albums = db.prepare('SELECT id, nom FROM albums ORDER BY nom').all();
   const body = `
     <section class="panel">
-      <h2 class="section-heading" style="font-size:1.4rem">${svgIcon('image')} Ajouter une photo</h2>
+      <h2 class="section-heading" style="font-size:1.4rem">${svgIcon('image')} Ajouter un media</h2>
       <form method="POST" action="/add-photo" enctype="multipart/form-data">
         <div class="form-grid">
-          <label>${svgIcon('image')} Photo *<input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp" required/></label>
+          <label>${svgIcon('image')} Fichier (photo ou video)<input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/ogg,video/quicktime"/></label>
+          <label>${svgIcon('play')} Video (lien YouTube/Vimeo)<input name="video_url" placeholder="https://youtube.com/watch?v=..."/></label>
           <label>${svgIcon('location')} Lieu (optionnel)<input name="lieu_photo" placeholder="ex: Chez tonton a Mayotte"/></label>
           <label>${svgIcon('album')} Album <select name="album_id">
             <option value="">\u2014 Aucun \u2014</option>
             ${albums.map(a => `<option value="${a.id}">${e(a.nom)}</option>`).join('')}
           </select></label>
         </div>
-        <p class="muted">Formats : JPG, PNG, GIF, WebP — max 10 Mo (redimensionne automatiquement).</p>
+        <p class="muted">Photo : JPG/PNG/GIF/WebP (redimensionnee). Video : MP4/WebM/OGG/MOV ou lien YouTube/Vimeo. Max 50 Mo.</p>
         <button class="btn" type="submit">${svgIcon('image')} Publier</button>
         <a class="btn btn-ghost" href="/gallery">Annuler</a>
       </form>
     </section>`;
-  res.send(layout('Ajouter photo', user, body, null, null, req.path));
+  res.send(layout('Ajouter media', user, body, null, null, req.path));
 });
 
 // Update tree filter
@@ -1403,5 +1478,5 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Manrouf-Mayotte app running on http://localhost:${PORT}`);
+  console.log(`Manroufou-Mayotte app running on http://localhost:${PORT}`);
 });

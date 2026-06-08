@@ -3,9 +3,25 @@ function openLightbox(photoId) {
   currentPhotoId = photoId;
   const el = document.querySelector(`[data-photo-id="${photoId}"]`);
   if (!el) return;
-  const img = el.querySelector('img');
   const lb = document.getElementById('lightbox');
-  document.getElementById('lightboxImg').src = img.src;
+  const imgEl = document.getElementById('lightboxImg');
+  const iframeEl = document.getElementById('lightboxVideo');
+  const videoEl = document.getElementById('lightboxLocalVideo');
+  const localVideo = el.dataset.localVideo;
+  const ytVideo = el.dataset.video;
+  imgEl.style.display = 'none'; iframeEl.style.display = 'none'; videoEl.style.display = 'none';
+  iframeEl.src = ''; videoEl.pause ? videoEl.pause() : 0; videoEl.src = '';
+  if (localVideo) {
+    videoEl.style.display = 'block';
+    videoEl.src = localVideo;
+  } else if (ytVideo) {
+    iframeEl.style.display = 'block';
+    iframeEl.src = ytVideo;
+  } else {
+    const img = el.querySelector('img');
+    imgEl.style.display = 'block';
+    imgEl.src = img.src;
+  }
   document.getElementById('commentPhotoId').value = photoId;
   document.getElementById('commentInput').value = '';
   document.getElementById('lightboxComments').innerHTML = '<div class="muted">Chargement...</div>';
@@ -14,6 +30,8 @@ function openLightbox(photoId) {
   fetchComments(photoId);
 }
 function closeLightbox() {
+  const videoEl = document.getElementById('lightboxLocalVideo');
+  videoEl.pause ? videoEl.pause() : 0;
   document.getElementById('lightbox').classList.remove('active');
   document.body.style.overflow = '';
 }

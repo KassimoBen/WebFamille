@@ -662,6 +662,11 @@ option { background: var(--surface); color: var(--text) }
   transition: transform .5s cubic-bezier(.4,0,.2,1);
 }
 .photo:hover img { transform: scale(1.08) }
+.video-thumb { position: relative; cursor: pointer; overflow: hidden }
+.video-thumb img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--surface); transition: transform .5s cubic-bezier(.4,0,.2,1); display: block }
+.video-thumb:hover img { transform: scale(1.08) }
+.play-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.35); transition: background .3s; color: #fff; font-size: 36px }
+.video-thumb:hover .play-overlay { background: rgba(0,0,0,.5) }
 .photo-meta {
   padding: clamp(10px, 1.5vw, 14px);
   color: var(--muted);
