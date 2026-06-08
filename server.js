@@ -61,7 +61,7 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo'];
+const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo', 'video/3gpp', 'video/x-matroska', 'video/avi'];
 const ALLOWED_MEDIA_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES];
 
 const storage = multer.diskStorage({
@@ -76,10 +76,10 @@ const upload = multer({
   storage,
   limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (req, file, cb) => {
-    if (ALLOWED_MEDIA_TYPES.includes(file.mimetype)) {
+    if (ALLOWED_IMAGE_TYPES.includes(file.mimetype) || file.mimetype.startsWith('video/')) {
       cb(null, true);
     } else {
-      cb(new Error('Format non autorise (images JPG/PNG/GIF/WebP ou videos MP4/WebM/OGG).'));
+      cb(new Error('Format non autorise (images JPG/PNG/GIF/WebP ou video MP4/WebM/MOV/3GP).'));
     }
   },
 });
@@ -1340,8 +1340,8 @@ const uploadResized = multer({
   storage: sharpStorage,
   limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (req, file, cb) => {
-    if (ALLOWED_MEDIA_TYPES.includes(file.mimetype)) { cb(null, true) }
-    else { cb(new Error('Format non autorise (images JPG/PNG/GIF/WebP ou videos MP4/WebM/OGG).')) }
+    if (ALLOWED_IMAGE_TYPES.includes(file.mimetype) || file.mimetype.startsWith('video/')) { cb(null, true) }
+    else { cb(new Error('Format non autorise (images JPG/PNG/GIF/WebP ou video MP4/WebM/MOV/3GP).')) }
   },
 });
 
@@ -1384,7 +1384,7 @@ app.post('/add-photo', requireAuth, (req, res, next) => {
       return res.redirect('/gallery');
     }
     if (!req.file) { req.flash('error', 'Selectionnez un fichier ou un lien video.'); return res.redirect('/add-photo') }
-    const isVideo = ALLOWED_VIDEO_TYPES.includes(req.file.mimetype);
+    const isVideo = req.file.mimetype.startsWith('video/');
     if (!isVideo) {
       try {
         const outPath = path.join(uploadsDir, req.file.filename);
@@ -1413,7 +1413,7 @@ app.get('/add-photo', requireAuth, (req, res) => {
       <h2 class="section-heading" style="font-size:1.4rem">${svgIcon('image')} Ajouter un media</h2>
       <form method="POST" action="/add-photo" enctype="multipart/form-data">
         <div class="form-grid">
-          <label>${svgIcon('image')} Fichier (photo ou video)<input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/ogg,video/quicktime"/></label>
+          <label>${svgIcon('image')} Fichier (photo ou video)<input type="file" name="photo" accept="image/*,video/*"/></label>
           <label>${svgIcon('play')} Video (lien YouTube/Vimeo)<input name="video_url" placeholder="https://youtube.com/watch?v=..."/></label>
           <label>${svgIcon('location')} Lieu (optionnel)<input name="lieu_photo" placeholder="ex: Chez tonton a Mayotte"/></label>
           <label>${svgIcon('album')} Album <select name="album_id">
