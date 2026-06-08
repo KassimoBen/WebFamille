@@ -1345,22 +1345,41 @@ const uploadResized = multer({
   },
 });
 
+function insertPhoto(fields) {
+  const cols = ['membre_id', 'image_path', 'lieu_photo', 'album_id'];
+  const vals = [fields.membre_id, fields.image_path, fields.lieu_photo, fields.album_id];
+  const opt = [];
+  if (fields.media_type) opt.push('media_type');
+  if (fields.video_url) opt.push('video_url');
+  let sql = `INSERT INTO photos (${cols.concat(opt).join(',')}) VALUES (${cols.concat(opt).map(() => '?').join(',')})`;
+  try {
+    db.prepare(sql).run(...vals, ...(opt.map(k => fields[k])));
+  } catch (e) {
+    sql = `INSERT INTO photos (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`;
+    db.prepare(sql).run(...vals);
+  }
+}
+
 app.post('/add-photo', requireAuth, (req, res, next) => {
   const videoUrl = req.body.video_url?.trim() || '';
   if (videoUrl) {
     const parsed = parseVideoUrl(videoUrl);
     if (!parsed) { req.flash('error', 'Lien video invalide (YouTube ou Vimeo attendu).'); return res.redirect('/add-photo') }
-    const lieu_photo = req.body.lieu_photo?.trim() || null;
-    const album_id = parseInt(req.body.album_id) || null;
-    db.prepare('INSERT INTO photos (membre_id, image_path, lieu_photo, album_id, video_url, media_type) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(req.session.userId, 'video_' + parsed.id + '.jpg', lieu_photo, album_id, videoUrl, 'video_link');
+    insertPhoto({
+      membre_id: req.session.userId,
+      image_path: 'video_' + parsed.id + '.jpg',
+      lieu_photo: req.body.lieu_photo?.trim() || null,
+      album_id: parseInt(req.body.album_id) || null,
+      video_url: videoUrl,
+      media_type: 'video_link',
+    });
     req.flash('success', 'Video publiee !');
     return res.redirect('/gallery');
   }
   uploadResized.single('photo')(req, res, async (err) => {
     if (err) {
       if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-        req.flash('error', 'Fichier trop volumineux (max 10 Mo).');
+        req.flash('error', 'Fichier trop volumineux (max 50 Mo).');
       } else { req.flash('error', err.message || 'Erreur lors de l\'upload.') }
       return res.redirect('/add-photo');
     }
@@ -1374,11 +1393,13 @@ app.post('/add-photo', requireAuth, (req, res, next) => {
         if (req.file.path !== outPath) try { fs.unlinkSync(req.file.path) } catch (e) {}
       } catch (e) { console.error('Sharp error:', e) }
     }
-    const lieu_photo = req.body.lieu_photo?.trim() || null;
-    const album_id = parseInt(req.body.album_id) || null;
-    const mediaType = isVideo ? 'video' : 'photo';
-    db.prepare('INSERT INTO photos (membre_id, image_path, lieu_photo, album_id, media_type) VALUES (?, ?, ?, ?, ?)')
-      .run(req.session.userId, req.file.filename, lieu_photo, album_id, mediaType);
+    insertPhoto({
+      membre_id: req.session.userId,
+      image_path: req.file.filename,
+      lieu_photo: req.body.lieu_photo?.trim() || null,
+      album_id: parseInt(req.body.album_id) || null,
+      media_type: isVideo ? 'video' : 'photo',
+    });
     req.flash('success', isVideo ? 'Video publiee !' : 'Photo publiee !');
     res.redirect('/gallery');
   });
