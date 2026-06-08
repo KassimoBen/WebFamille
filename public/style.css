@@ -115,7 +115,7 @@ a:hover { color: var(--accent2) }
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid rgba(255,255,255,.1);
   padding: 0 clamp(12px, 2vw, 24px);
-  display: flex; gap: 10px; align-items: center;
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
   z-index: 100;
   min-height: var(--header-h);
   box-shadow: 0 1px 0 rgba(255,255,255,.03), var(--shadow-sm);
@@ -767,11 +767,14 @@ option { background: var(--surface); color: var(--text) }
 /* ── ≤ 768px ── */
 @media (max-width: 768px) {
   .menu-btn { display: flex }
-  .menu { display: none; flex-direction: column; width: 100%; order: 3; padding: 6px 0 12px; gap: 2px }
+  .menu { display: none; flex-direction: column; width: 100%; order: 3; padding: 8px 0 14px; gap: 2px }
   .authbar { display: none }
-  .menu-toggle:checked ~ .menu { display: flex }
-  .menu-toggle:checked ~ .authbar { display: block; width: 100%; order: 4; text-align: center; padding: 10px 0 12px; border-top: 1px solid rgba(255,255,255,.06); margin-top: 4px; border-left: 0 }
-  .menu a { padding: 10px 14px; justify-content: center; font-size: 14px }
+  .menu-toggle:checked ~ .menu { display: flex; background: rgba(15,23,42,.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 0 0 var(--radius-sm) var(--radius-sm); padding-bottom: 14px }
+  .menu-toggle:checked ~ .authbar { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px; width: 100%; order: 4; text-align: center; padding: 12px 14px 14px; border-top: 1px solid rgba(255,255,255,.08); margin-top: 0; border-left: 0; background: rgba(15,23,42,.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 0 0 var(--radius-sm) var(--radius-sm); font-size: 13px }
+  .menu a { padding: 12px 14px; justify-content: center; font-size: 15px }
+  .menu a.active { background: rgba(59,130,246,.2); border-left: 3px solid var(--accent); font-weight: 700 }
+  .menu a.active::after { display: none }
+  .menu a:hover { transform: none }
 
   .photo-mosaic { grid-template-columns: repeat(2, 1fr) }
   .mosaic-item-1 { grid-column: span 1 }
@@ -811,6 +814,8 @@ option { background: var(--surface); color: var(--text) }
   .form-grid { gap: 8px }
 
   .mosaic-section { display: none }
+
+  .menu a { font-size: 14px; padding: 14px 12px }
 }
 
 /* ── ≤ 360px ── */
